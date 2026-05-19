@@ -173,6 +173,18 @@ templates:
     version: "0.12.12-canary.1"
     {{- end }}
   
+  bor:
+    {{- if ( .Values | get "bor" dict | get "chartUrl" false ) }}
+    chart: {{ .Values | get "bor" | get "chartUrl" }}
+    {{- else }}
+    chart: "graphops/bor"
+    {{- end }}
+    inherit:
+    - template: "defaults"
+    {{- if ( .Values | get "bor" dict | get "chartVersion" false ) }}
+    version: {{ .Values | get "bor" | get "chartVersion" }}
+    {{- end }}
+  
   heimdall:
     {{- if ( .Values | get "heimdall" dict | get "chartUrl" false ) }}
     chart: {{ .Values | get "heimdall" | get "chartUrl" }}
@@ -219,6 +231,53 @@ templates:
     {{- end }}
   
 releases:
+  {{ if has "bor" ( .Values | get "features" list ) }}
+  {{- $canonicalRelease := "bor" }}
+  {{- range $index := until (.Values.scaling | get $canonicalRelease dict | get "deployments" .Values.scaling.deployments) }}
+  {{- $deploymentIndex := (add . 1) }}
+  {{- $release := (printf "%s%v" "bor-" $deploymentIndex) }}
+  {{- $_templatedValue_0 :=  $canonicalRelease  }}
+  {{- $_templatedValue_1 :=  $release  }}
+  {{- $_templatedValue_2 :=  $deploymentIndex  }}
+  {{- $_releaseResourceLabels := dict 
+  `app.launchpad.graphops.xyz/layer` `execution`
+  `app.launchpad.graphops.xyz/component` $_templatedValue_0
+  `app.launchpad.graphops.xyz/release` $_templatedValue_1
+  `app.launchpad.graphops.xyz/scalingIndex` $_templatedValue_2
+  }}
+  {{- $_releaseResourceLabels = mergeOverwrite $_commonLabels $_commonResourceLabels $_releaseResourceLabels }}
+  - name: "{{ $release }}"
+    inherit:
+    - template: "{{ $canonicalRelease }}"
+    labels:
+      app.launchpad.graphops.xyz/layer: execution
+      app.launchpad.graphops.xyz/release: '{{ $release }}'
+      app.launchpad.graphops.xyz/component: '{{ $canonicalRelease }}'
+      app.launchpad.graphops.xyz/scalingIndex: '{{ $deploymentIndex }}'
+      
+    {{- range $key,$value := ( $.Values | get $canonicalRelease dict | get "labels" dict ) }}
+      {{ $key }}: {{ $value }}
+    {{- $_ := set $_releaseResourceLabels $key $value }}
+    {{- end }}
+    {{- if (ne $release $canonicalRelease) }}
+    {{- range $key,$value := ( $.Values | get $release dict | get "labels" dict ) }}
+      {{ $key }}: {{ $value }}
+    {{- $_ := set $_releaseResourceLabels $key $value }}
+    {{- end }}
+    {{- end }}
+    {{- range $key,$value := ( $.Values | get $canonicalRelease dict | get "resourceLabels" dict ) }}
+    {{- $_ := set $_releaseResourceLabels $key $value }}
+    {{- end }}
+    {{- if (ne $release $canonicalRelease) }}
+    {{- range $key,$value := ( $.Values | get $release dict | get "resourceLabels" dict ) }}
+    {{- $_ := set $_releaseResourceLabels $key $value }}
+    {{- end }}
+    {{- end }}
+    {{- tpl $_tplTransforms (dict "Values" $.Values "release" $release "canonicalRelease" $canonicalRelease "resourceLabels" $_releaseResourceLabels  )  | indent 4 -}}
+    values:
+    {{- tpl $_tplReleaseValues (dict "Values" $.Values "canonicalRelease" $canonicalRelease "release" $release) | indent 4 -}}
+  {{- end -}}
+  {{- end -}}
   {{ if has "erigon" ( .Values | get "features" list ) }}
   {{- $canonicalRelease := "erigon" }}
   {{- range $index := until (.Values.scaling | get $canonicalRelease dict | get "deployments" .Values.scaling.deployments) }}
